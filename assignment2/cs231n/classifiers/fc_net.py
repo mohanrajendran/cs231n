@@ -176,12 +176,15 @@ class FullyConnectedNet(object):
         # parameters should be initialized to zeros.                               #
         ############################################################################
         for layer in range(self.num_layers):
-            idx = str(layer)
             inp = input_dim if layer == 0 else hidden_dims[layer-1]
             out = num_classes if layer == self.num_layers-1 else hidden_dims[layer]
             
+            idx = str(layer+1)
             self.params['W' + idx] = np.random.randn(inp, out) * weight_scale
-            self.params['b' + idx] = np.zeros(out)    
+            self.params['b' + idx] = np.zeros(out)
+            if self.normalization and layer != self.num_layers-1:
+                self.params['gamma' + idx] = np.ones(out)
+                self.params['beta' + idx] = np.zeros(out)
         ############################################################################
         #                             END OF YOUR CODE                             #
         ############################################################################
@@ -243,10 +246,27 @@ class FullyConnectedNet(object):
         h = X
         caches = []
         for layer in range(self.num_layers - 1):
-            idx = str(layer)
-            h, cache = affine_relu_forward(h, self.params['W' + idx], self.params['b' + idx])
+            idx = str(layer+1)
+            if self.normalization:
+                W = self.params['W' + idx]
+                b = self.params['b' + idx]
+                gamma = self.params['gamma' + idx]
+                beta = self.params['beta' + idx]
+                
+                a, fc_cache = affine_forward(h, W, b)
+                if self.normalization == 'batchnorm':
+                    an, bn_cache = batchnorm_forward(a, gamma, beta, self.bn_params[layer])
+                elif self.normalization == 'layernorm':
+                    an, bn_cache = layernorm_forward(a, gamma, beta, self.bn_params[layer])
+                h, relu_cache = relu_forward(an)
+                
+                cache = (fc_cache, bn_cache, relu_cache)
+            else:
+                h, cache = affine_relu_forward(h, self.params['W' + idx], self.params['b' + idx])
+            
             caches.append(cache)
-        idx = str(self.num_layers - 1)
+            
+        idx = str(self.num_layers)
         scores, cache = affine_forward(h, self.params['W' + idx], self.params['b' + idx])
         ############################################################################
         #                             END OF YOUR CODE                             #
@@ -271,16 +291,26 @@ class FullyConnectedNet(object):
         # of 0.5 to simplify the expression for the gradient.                      #
         ############################################################################
         loss, dscores = softmax_loss(scores, y)
-        idx = str(self.num_layers - 1)
+        idx = str(self.num_layers)
         dh, grads['W' + idx], grads['b' + idx] = affine_backward(dscores, cache)
         
         for layer in range(self.num_layers - 2, -1, -1):
-            idx = str(layer)
+            idx = str(layer + 1)
             cache = caches.pop()
-            dh, grads['W' + idx], grads['b' + idx] = affine_relu_backward(dh, cache)
+            
+            if self.normalization:
+                fc_cache, bn_cache, relu_cache = cache
+                dan = relu_backward(dh, relu_cache)
+                if self.normalization=='batchnorm':
+                    da, grads['gamma' + idx], grads['beta' + idx] = batchnorm_backward_alt(dan, bn_cache)
+                elif self.normalization=='layernorm':
+                    da, grads['gamma' + idx], grads['beta' + idx] = layernorm_backward(dan, bn_cache)
+                dh, grads['W' + idx], grads['b' + idx] = affine_backward(da, fc_cache)
+            else:
+                dh, grads['W' + idx], grads['b' + idx] = affine_relu_backward(dh, cache)
         
         for layer in range(self.num_layers):
-            idx = str(layer)
+            idx = str(layer + 1)
             loss += 0.5 * self.reg * (np.sum(self.params['W' + idx]**2))
             grads['W' + idx] += self.reg * self.params['W' + idx]
         ############################################################################
