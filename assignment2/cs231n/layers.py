@@ -427,7 +427,8 @@ def dropout_forward(x, dropout_param):
         # TODO: Implement training phase forward pass for inverted dropout.   #
         # Store the dropout mask in the mask variable.                        #
         #######################################################################
-        pass
+        mask = (np.random.rand(*x.shape) < p) / p
+        out = x * mask
         #######################################################################
         #                           END OF YOUR CODE                          #
         #######################################################################
@@ -435,7 +436,7 @@ def dropout_forward(x, dropout_param):
         #######################################################################
         # TODO: Implement the test phase forward pass for inverted dropout.   #
         #######################################################################
-        pass
+        out = x
         #######################################################################
         #                            END OF YOUR CODE                         #
         #######################################################################
@@ -462,7 +463,8 @@ def dropout_backward(dout, cache):
         #######################################################################
         # TODO: Implement training phase backward pass for inverted dropout   #
         #######################################################################
-        pass
+        dx = dout / dropout_param['p']
+        dx[mask == 0] = 0
         #######################################################################
         #                          END OF YOUR CODE                           #
         #######################################################################
@@ -504,7 +506,29 @@ def conv_forward_naive(x, w, b, conv_param):
     # TODO: Implement the convolutional forward pass.                         #
     # Hint: you can use the function np.pad for padding.                      #
     ###########################################################################
-    pass
+    stride = conv_param['stride']
+    pad = conv_param['pad']
+    N, C, H, W = x.shape
+    F, _, HH, WW = w.shape
+    
+    padding = ((0,), (0,), (pad,), (pad,))
+    inp = np.pad(x, padding, 'constant')
+    
+    Hp = 1 + (H + 2 * pad - HH) // stride
+    Wp = 1 + (W + 2 * pad - WW) // stride
+    
+    out = np.zeros((N, F, Hp, Wp))
+    
+    for n in range(N):
+        for f in range(F):
+            for hp in range(Hp):
+                for wp in range(Wp):
+                    hs = hp * stride
+                    he = hs + HH
+                    ws = wp * stride
+                    we = ws + WW
+                    window = inp[n, :, hs:he, ws:we]
+                    out[n, f, hp, wp] = np.sum(window * w[f,:,:,:]) + b[f]
     ###########################################################################
     #                             END OF YOUR CODE                            #
     ###########################################################################
@@ -529,7 +553,37 @@ def conv_backward_naive(dout, cache):
     ###########################################################################
     # TODO: Implement the convolutional backward pass.                        #
     ###########################################################################
-    pass
+    x, w, b, conv_param = cache
+    
+    stride = conv_param['stride']
+    pad = conv_param['pad']
+    N, C, H, W = x.shape
+    F, _, HH, WW = w.shape
+    _, _, Hp, Wp = dout.shape
+    
+    dx = np.zeros_like(x)
+    dw = np.zeros_like(w)
+    db = np.zeros_like(b)
+    
+    padding = ((0,), (0,), (pad,), (pad,))
+    inp = np.pad(x, padding, 'constant')
+    dinp = np.pad(dx, padding, 'constant')
+    
+    for n in range(N):
+        for f in range(F):
+            for hp in range(Hp):
+                for wp in range(Wp):
+                    hs = hp * stride
+                    he = hs + HH
+                    ws = wp * stride
+                    we = ws + WW
+                    window = inp[n, :, hs:he, ws:we]
+                    grad = dout[n, f, hp, wp]
+                    db[f] += grad
+                    dinp[n, :, hs:he, ws:we] += (w[f,:,:,:] * grad)
+                    dw[f,:,:,:] += (window * grad)
+    
+    dx = dinp[:, :, pad:-pad, pad:-pad]
     ###########################################################################
     #                             END OF YOUR CODE                            #
     ###########################################################################
