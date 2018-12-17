@@ -263,6 +263,10 @@ class FullyConnectedNet(object):
                 cache = (fc_cache, bn_cache, relu_cache)
             else:
                 h, cache = affine_relu_forward(h, self.params['W' + idx], self.params['b' + idx])
+                
+            if self.use_dropout:
+                h, drop_cache = dropout_forward(h, self.dropout_param)
+                cache = (cache, drop_cache)
             
             caches.append(cache)
             
@@ -297,6 +301,10 @@ class FullyConnectedNet(object):
         for layer in range(self.num_layers - 2, -1, -1):
             idx = str(layer + 1)
             cache = caches.pop()
+            
+            if self.use_dropout:
+                cache, dropout_cache = cache
+                dh = dropout_backward(dh, dropout_cache)
             
             if self.normalization:
                 fc_cache, bn_cache, relu_cache = cache
